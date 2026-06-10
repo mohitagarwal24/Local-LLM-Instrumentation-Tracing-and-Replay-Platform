@@ -203,6 +203,10 @@ void Tracer::check_anomalies(const TraceEvent& ev) {
              "High sparsity (" + std::to_string(static_cast<int>(ev.stats.sparsity * 100)) +
                  "%) in " + ev.tensor_name);
     }
+    if (ev.device.rfind("CPU", 0) == 0 && ev.layer_type == LayerType::Norm && ev.latency_ms > 3.0) {
+        push(AnomalyKind::OutlierMax,
+             "CPU Fallback: elevated latency on " + ev.tensor_name);
+    }
 }
 
 bool Tracer::maybe_capture_attention(struct ggml_tensor* t, std::vector<uint8_t>& scratch) {
