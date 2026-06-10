@@ -43,6 +43,7 @@ bool LlamaRunner::init() {
     cparams.n_ctx = static_cast<uint32_t>(config_.n_ctx);
     cparams.n_threads = config_.n_threads;
     cparams.n_threads_batch = config_.n_threads;
+    // Flash attention must be disabled so kq_soft_max tensors materialize for capture.
     cparams.flash_attn = false;
     cparams.cb_eval = trace::Tracer::eval_callback;
     cparams.cb_eval_user_data = &tracer_;
