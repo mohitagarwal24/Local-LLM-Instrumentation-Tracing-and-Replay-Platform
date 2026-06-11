@@ -11,6 +11,7 @@ add_executable(llm-trace
     src/main.cpp
     src/tracer/tracer.cpp
     src/tracer/topology.cpp
+    src/tracer/recorder.cpp
     src/engine/llama_runner.cpp
 )
 

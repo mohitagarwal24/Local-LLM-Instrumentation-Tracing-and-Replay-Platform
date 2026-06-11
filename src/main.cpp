@@ -1,4 +1,5 @@
 #include "engine/llama_runner.hpp"
+#include "tracer/recorder.hpp"
 
 #include "llama.h"
 
@@ -8,8 +9,10 @@
 
 static void print_usage(const char* argv0) {
     std::fprintf(stderr,
-                 "Usage: %s --model <path.gguf> [--prompt <text>] [--verbose-trace]\n",
-                 argv0);
+                 "Usage:\n"
+                 "  %s --model <path.gguf> [--prompt <text>] [--verbose-trace]\n"
+                 "  %s --replay <trace.bin>\n",
+                 argv0, argv0);
 }
 
 static std::string arg_value(int argc, char** argv, const char* flag) {
@@ -31,9 +34,22 @@ static bool arg_flag(int argc, char** argv, const char* flag) {
 }
 
 int main(int argc, char** argv) {
+    const std::string replay_path = arg_value(argc, argv, "--replay");
     const std::string model_path = arg_value(argc, argv, "--model");
     const std::string prompt = arg_value(argc, argv, "--prompt");
     const bool verbose_trace = arg_flag(argc, argv, "--verbose-trace");
+
+    if (!replay_path.empty()) {
+        trace::Replayer replayer(replay_path);
+        if (!replayer.load()) {
+            std::fprintf(stderr, "Failed to load trace: %s\n", replay_path.c_str());
+            return 1;
+        }
+        std::printf("Replay loaded: %zu events, %zu anomalies, %zu attention snapshots\n",
+                    replayer.events().size(), replayer.anomalies().size(),
+                    replayer.attentions().size());
+        return 0;
+    }
 
     if (model_path.empty()) {
         print_usage(argv[0]);
