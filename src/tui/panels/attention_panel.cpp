@@ -9,7 +9,7 @@ namespace tui {
 static char heat_char(float v, float contrast) {
     const float x = std::clamp(v * contrast, 0.f, 1.f);
     if (x > 0.85f) {
-        return '#';
+        return static_cast<char>(0xDB);
     }
     if (x > 0.65f) {
         return '%';
@@ -58,7 +58,7 @@ ftxui::Element render_attention_panel(const trace::AttentionSnapshot& attention,
     }
 
     rows.push_back(ftxui::separator());
-    rows.push_back(ftxui::text("[hjkl]: Pan  [+/-]: Contrast  [[]/[]]: Head"));
+    rows.push_back(ftxui::text("[hjkl]: Pan matrix  [+/-]: Contrast  [[]/[]]: Head  [Tab]: Focus"));
 
     auto title = focused ? "3. ATTENTION MATRIX (Focus Active)" : "3. ATTENTION MATRIX";
     return ftxui::window(ftxui::text(title), ftxui::vbox(rows)) |

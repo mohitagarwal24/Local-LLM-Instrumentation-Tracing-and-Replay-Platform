@@ -1,6 +1,6 @@
 # LLM Trace Platform
 
-Non-invasive telemetry and tracing for local transformer models (GGUF via llama.cpp).
+Non-invasive telemetry, tracing, and replay for local transformer models. Works with any GGUF model loaded through [llama.cpp](https://github.com/ggml-org/llama.cpp) (Llama, Mistral, Qwen, Gemma, Phi, etc.) by hooking the graph eval callback—no model source changes required.
 
 ## Build
 
@@ -12,14 +12,37 @@ cmake --build build
 ## Usage
 
 ```bash
-# Smoke test: print model metadata
+# Model metadata smoke test
 ./build/llm-trace --model path/to/model.gguf
 
-# Live capture with TUI (coming soon)
-./build/llm-trace --model path/to/model.gguf --prompt "hello"
+# Live capture to stdout (non-invasive cb_eval hook)
+./build/llm-trace --model path/to/model.gguf --verbose-trace --prompt "hello"
 
-# Replay a recorded trace (coming soon)
-./build/llm-trace --replay trace.bin
+# Interactive TUI during live inference
+./build/llm-trace --model path/to/model.gguf --prompt "hello" --tui
+
+# Record a session trace
+./build/llm-trace --model path/to/model.gguf --prompt "hello" --record session.trace --tui
+
+# Replay without a model
+./build/generate-demo-trace demo.trace
+./build/llm-trace --replay demo.trace --tui
 ```
 
-Requires a GGUF model for live capture (e.g. TinyLlama, Qwen2.5-0.5B).
+## TUI Keys
+
+| Key | Action |
+|-----|--------|
+| `Tab` | Cycle panel focus |
+| `Q` | Quit |
+| `j` / `k` | Navigate lists |
+| `Space` | Set capture target (topology) |
+| `h` `j` `k` `l` | Pan attention matrix |
+| `+` / `-` | Attention contrast |
+| `[` / `]` | Change attention head |
+
+## Requirements
+
+- CMake 3.20+, C++17 compiler
+- Live capture: a GGUF model (e.g. TinyLlama, Qwen2.5-0.5B)
+- Replay mode: no model required
