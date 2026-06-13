@@ -1,4 +1,5 @@
 #include "engine/llama_runner.hpp"
+#include "engine/model_load.hpp"
 #include "tui/app.hpp"
 #include "tracer/recorder.hpp"
 
@@ -38,7 +39,7 @@ static bool arg_flag(int argc, char** argv, const char* flag) {
 static int run_metadata_only(const std::string& model_path) {
     llama_backend_init();
 
-    llama_model_params mparams = llama_model_default_params();
+    llama_model_params mparams = llm_trace_model_params();
     llama_model* model = llama_load_model_from_file(model_path.c_str(), mparams);
     if (!model) {
         std::fprintf(stderr, "Failed to load model: %s\n", model_path.c_str());
@@ -105,7 +106,8 @@ int main(int argc, char** argv) {
     }
 
     if (verbose_trace) {
-        runner.start_async();
+        runner.start_worker();
+        runner.request_decode();
         runner.wait();
         std::printf("Captured %zu trace events\n", runner.tracer().events().snapshot().size());
         return 0;
@@ -116,7 +118,8 @@ int main(int argc, char** argv) {
         return app.run();
     }
 
-    runner.start_async();
+    runner.start_worker();
+    runner.request_decode();
     runner.wait();
     return 0;
 }

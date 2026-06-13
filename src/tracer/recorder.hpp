@@ -22,7 +22,7 @@ public:
     void write_attention(const AttentionSnapshot& snap);
 
     static constexpr uint32_t kMagic = 0x54524143;  // 'TRAC'
-    static constexpr uint32_t kVersion = 1;
+    static constexpr uint32_t kVersion = 2;
 
 private:
     void write_string(const std::string& s);

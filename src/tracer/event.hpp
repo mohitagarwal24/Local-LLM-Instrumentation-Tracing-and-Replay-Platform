@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstdint>
@@ -54,10 +55,20 @@ struct TraceEvent {
 
 struct AttentionSnapshot {
     int layer = 0;
-    int head = 0;
+    int n_heads = 0;
     int n_tokens = 0;
-    std::vector<float> weights;  // row-major [n_tokens x n_tokens]
+    // row-major per head: weights[head * n_tokens * n_tokens + row * n_tokens + col]
+    std::vector<float> weights;
     std::chrono::steady_clock::time_point timestamp{};
+
+    float weight_at(int head, int row, int col) const {
+        if (n_tokens <= 0 || n_heads <= 0 || weights.empty()) {
+            return 0.f;
+        }
+        const int h = std::max(0, std::min(head, n_heads - 1));
+        const size_t idx = static_cast<size_t>(h * n_tokens * n_tokens + row * n_tokens + col);
+        return idx < weights.size() ? weights[idx] : 0.f;
+    }
 };
 
 struct AnomalyRecord {

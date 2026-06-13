@@ -4,7 +4,9 @@
 #include "tracer/topology.hpp"
 
 #include <atomic>
+#include <condition_variable>
 #include <functional>
+#include <mutex>
 #include <string>
 #include <thread>
 
@@ -30,7 +32,8 @@ public:
     LlamaRunner& operator=(const LlamaRunner&) = delete;
 
     bool init();
-    void start_async();
+    void start_worker();
+    void request_decode();
     void wait();
     void request_stop();
 
@@ -41,10 +44,20 @@ public:
 
     bool running() const { return running_.load(); }
     bool finished() const { return finished_.load(); }
+    int n_heads() const { return n_heads_; }
     std::string model_name() const { return model_name_; }
 
 private:
-    void run_once();
+    void worker_loop();
+    void run_decode();
+
+    std::mutex worker_mu_;
+    std::condition_variable worker_cv_;
+    bool worker_started_ = false;
+    bool decode_requested_ = false;
+    bool shutdown_ = false;
+
+    int n_heads_ = 0;
 
     RunnerConfig config_;
     trace::Tracer tracer_;
@@ -57,7 +70,6 @@ private:
     std::thread worker_;
     std::atomic<bool> running_{false};
     std::atomic<bool> finished_{false};
-    std::atomic<bool> stop_{false};
 };
 
 }  // namespace engine

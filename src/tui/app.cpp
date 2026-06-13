@@ -10,6 +10,8 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/dom/elements.hpp>
 
+#include <algorithm>
+
 namespace tui {
 
 TraceApp::TraceApp(engine::LlamaRunner* runner, trace::Replayer* replayer, bool record_trace,
@@ -51,6 +53,9 @@ void TraceApp::pump_events() {
     const auto attn = runner_->tracer().attention_copy();
     if (!attn.weights.empty()) {
         attention_ = attn;
+        if (attention_.n_heads > 0) {
+            state_.attn_head = std::clamp(state_.attn_head, 0, attention_.n_heads - 1);
+        }
         if (recorder_ && recorder_->is_open()) {
             recorder_->write_attention(attention_);
         }
@@ -76,11 +81,25 @@ void TraceApp::update_selected_layer() {
     }
 }
 
+void TraceApp::trigger_capture_pass() {
+    if (!runner_) {
+        return;
+    }
+    update_selected_layer();
+    cached_events_.clear();
+    cached_anomalies_.clear();
+    attention_ = {};
+    state_.attn_pan_x = 0;
+    state_.attn_pan_y = 0;
+    runner_->request_decode();
+}
+
 int TraceApp::run() {
     auto screen = ftxui::ScreenInteractive::Fullscreen();
 
     if (runner_) {
-        runner_->start_async();
+        runner_->start_worker();
+        runner_->request_decode();
     }
 
     auto component = ftxui::CatchEvent(ftxui::Renderer([&] {
@@ -100,7 +119,13 @@ int TraceApp::run() {
         const trace::Topology& topo =
             runner_ ? runner_->topology() : replay_topology_;
 
-        auto help = ftxui::text("[Tab]: Cycle Focus  |  [Q]: Quit App") | ftxui::center;
+        std::string status;
+        if (runner_ && runner_->running()) {
+            status = "  |  [Capturing...]";
+        }
+        auto help = ftxui::text("[Tab]: Focus  |  [Q]: Quit  |  Topology: j/k, g/G, [Space]/[r]: capture" +
+                                status) |
+                    ftxui::center;
 
         auto top_row = ftxui::hbox({
             render_topology_panel(topo, state_, f_topo) | ftxui::flex,
@@ -127,20 +152,36 @@ int TraceApp::run() {
         }
 
         if (state_.focus == PanelFocus::Topology) {
-            const int n = runner_ ? static_cast<int>(runner_->topology().nodes().size())
-                                  : static_cast<int>(replay_topology_.nodes().size());
-            if (event == ftxui::Event::Character('j')) {
-                state_.topology_cursor = std::min(n - 1, state_.topology_cursor + 1);
+            const trace::Topology& topo =
+                runner_ ? runner_->topology() : replay_topology_;
+
+            const auto move_topology = [&](int delta) {
+                state_.topology_cursor = topology_next_node(topo, state_.topology_cursor, delta);
+                topology_ensure_visible(topo, state_);
+            };
+
+            if (event == ftxui::Event::Character('j') || event == ftxui::Event::ArrowDown) {
+                move_topology(+1);
                 return true;
             }
-            if (event == ftxui::Event::Character('k')) {
-                state_.topology_cursor = std::max(0, state_.topology_cursor - 1);
+            if (event == ftxui::Event::Character('k') || event == ftxui::Event::ArrowUp) {
+                move_topology(-1);
                 return true;
             }
-            if (event == ftxui::Event::Character(' ')) {
+            if (event == ftxui::Event::Character('g')) {
+                state_.topology_cursor = topology_first_node(topo);
+                topology_ensure_visible(topo, state_);
+                return true;
+            }
+            if (event == ftxui::Event::Character('G')) {
+                state_.topology_cursor = topology_last_node(topo);
+                topology_ensure_visible(topo, state_);
+                return true;
+            }
+            if (event == ftxui::Event::Character(' ') || event == ftxui::Event::Character('r')) {
                 if (runner_) {
                     runner_->topology().set_capture_target(state_.topology_cursor);
-                    update_selected_layer();
+                    trigger_capture_pass();
                 } else {
                     replay_topology_.set_capture_target(state_.topology_cursor);
                 }
@@ -185,17 +226,20 @@ int TraceApp::run() {
                 return true;
             }
             if (event == ftxui::Event::Character('[')) {
-                state_.attn_head = std::max(0, state_.attn_head - 1);
-                if (runner_) {
-                    runner_->tracer().set_attention_head(state_.attn_head);
+                if (state_.attn_head <= 0) {
+                    return true;
                 }
+                state_.attn_head -= 1;
                 return true;
             }
             if (event == ftxui::Event::Character(']')) {
-                state_.attn_head += 1;
-                if (runner_) {
-                    runner_->tracer().set_attention_head(state_.attn_head);
+                const int max_head = attention_.n_heads > 0
+                                         ? attention_.n_heads - 1
+                                         : (runner_ ? std::max(0, runner_->n_heads() - 1) : 0);
+                if (state_.attn_head >= max_head) {
+                    return true;
                 }
+                state_.attn_head += 1;
                 return true;
             }
         }

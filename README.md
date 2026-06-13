@@ -35,11 +35,12 @@ cmake --build build
 |-----|--------|
 | `Tab` | Cycle panel focus |
 | `Q` | Quit |
-| `j` / `k` | Navigate lists |
-| `Space` | Set capture target (topology) |
+| `j` / `k` or arrows | Navigate lists (topology scrolls automatically) |
+| `g` / `G` | Jump to top / bottom of topology |
+| `Space` / `r` | Set capture target and re-run inference (topology) |
 | `h` `j` `k` `l` | Pan attention matrix |
 | `+` / `-` | Attention contrast |
-| `[` / `]` | Change attention head |
+| `[` / `]` | Switch attention head instantly (no re-run) |
 
 ## Requirements
 

@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
 
     trace::AttentionSnapshot attn;
     attn.layer = 1;
-    attn.head = 0;
+    attn.n_heads = 1;
     attn.n_tokens = 8;
     attn.timestamp = t0 + std::chrono::milliseconds(150);
     attn.weights.resize(64);

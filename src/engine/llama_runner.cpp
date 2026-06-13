@@ -1,4 +1,5 @@
 #include "engine/llama_runner.hpp"
+#include "engine/model_load.hpp"
 
 #include "llama.h"
 
@@ -27,17 +28,20 @@ LlamaRunner::~LlamaRunner() {
 bool LlamaRunner::init() {
     llama_backend_init();
 
-    llama_model_params mparams = llama_model_default_params();
+    llama_model_params mparams = llm_trace_model_params();
     model_ = llama_load_model_from_file(config_.model_path.c_str(), mparams);
     if (!model_) {
         std::fprintf(stderr, "Failed to load model: %s\n", config_.model_path.c_str());
         return false;
     }
 
+    n_heads_ = llama_n_head(model_);
+
     const auto slash = config_.model_path.find_last_of("/\\");
     model_name_ = slash == std::string::npos ? config_.model_path
                                              : config_.model_path.substr(slash + 1);
     topology_.build_from_model(model_, model_name_);
+    tracer_.set_capture_target(0);
 
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = static_cast<uint32_t>(config_.n_ctx);
@@ -57,14 +61,34 @@ bool LlamaRunner::init() {
     return true;
 }
 
-void LlamaRunner::start_async() {
-    if (running_.load()) {
+void LlamaRunner::start_worker() {
+    std::lock_guard<std::mutex> lock(worker_mu_);
+    if (worker_started_) {
         return;
     }
-    stop_.store(false);
-    finished_.store(false);
-    running_.store(true);
-    worker_ = std::thread([this] { run_once(); });
+    worker_started_ = true;
+    shutdown_ = false;
+    worker_ = std::thread([this] { worker_loop(); });
+}
+
+void LlamaRunner::request_decode() {
+    {
+        std::lock_guard<std::mutex> lock(worker_mu_);
+        if (!worker_started_) {
+            return;
+        }
+        decode_requested_ = true;
+    }
+    worker_cv_.notify_one();
+}
+
+void LlamaRunner::request_stop() {
+    {
+        std::lock_guard<std::mutex> lock(worker_mu_);
+        shutdown_ = true;
+        decode_requested_ = true;
+    }
+    worker_cv_.notify_all();
 }
 
 void LlamaRunner::wait() {
@@ -73,20 +97,33 @@ void LlamaRunner::wait() {
     }
 }
 
-void LlamaRunner::request_stop() {
-    stop_.store(true);
+void LlamaRunner::worker_loop() {
+    while (true) {
+        {
+            std::unique_lock<std::mutex> lock(worker_mu_);
+            worker_cv_.wait(lock, [this] { return shutdown_ || decode_requested_; });
+            if (shutdown_) {
+                break;
+            }
+            decode_requested_ = false;
+        }
+        run_decode();
+    }
+    running_.store(false);
+    finished_.store(true);
 }
 
-void LlamaRunner::run_once() {
+void LlamaRunner::run_decode() {
     if (!ctx_) {
-        running_.store(false);
-        finished_.store(true);
         return;
     }
 
-    tracer_.reset();
+    running_.store(true);
+    finished_.store(false);
 
-    const int n_vocab = llama_n_vocab(model_);
+    tracer_.reset();
+    llama_kv_cache_clear(ctx_);
+
     std::vector<llama_token> tokens(config_.prompt.size() + 8);
     const int n_tokens = llama_tokenize(model_, config_.prompt.c_str(),
                                         static_cast<int>(config_.prompt.size()),
@@ -105,7 +142,6 @@ void LlamaRunner::run_once() {
         std::fprintf(stderr, "llama_decode failed\n");
     }
 
-    (void)n_vocab;
     running_.store(false);
     finished_.store(true);
 }

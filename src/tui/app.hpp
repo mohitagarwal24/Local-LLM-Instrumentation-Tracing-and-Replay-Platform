@@ -22,7 +22,8 @@ enum class PanelFocus {
 
 struct AppState {
     PanelFocus focus = PanelFocus::Topology;
-    int topology_cursor = 0;
+    int topology_cursor = 1;   // skip root node (not shown in list)
+    int topology_scroll = 0;   // first visible line in topology panel
     int packet_scroll = 0;
     int anomaly_scroll = 0;
     int attn_head = 0;
@@ -42,6 +43,7 @@ public:
 private:
     void pump_events();
     void update_selected_layer();
+    void trigger_capture_pass();
 
     engine::LlamaRunner* runner_;
     trace::Replayer* replayer_;

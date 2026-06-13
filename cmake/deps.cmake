@@ -1,5 +1,10 @@
 include(FetchContent)
 
+if(MINGW)
+    # Required for PrefetchVirtualMemory when model mmap is enabled (llama.cpp #9311).
+    add_compile_definitions(_WIN32_WINNT=0x0602)
+endif()
+
 set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)

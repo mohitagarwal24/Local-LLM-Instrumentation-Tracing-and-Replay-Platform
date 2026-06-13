@@ -66,8 +66,8 @@ void Topology::build_from_model(const llama_model* model, const std::string& mod
         nodes_[layers_idx].children.push_back(layer_idx);
     }
 
-  if (!nodes_.empty()) {
-        set_capture_target(0);
+    if (nodes_.size() > 3) {
+        set_capture_target(3);  // layers.0.attn
     }
 }
 

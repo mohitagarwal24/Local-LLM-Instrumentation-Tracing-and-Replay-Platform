@@ -93,7 +93,7 @@ void Recorder::write_attention(const AttentionSnapshot& snap) {
     const auto type = static_cast<uint8_t>(RecordType::Attention);
     out_.write(reinterpret_cast<const char*>(&type), sizeof(type));
     out_.write(reinterpret_cast<const char*>(&snap.layer), sizeof(snap.layer));
-    out_.write(reinterpret_cast<const char*>(&snap.head), sizeof(snap.head));
+    out_.write(reinterpret_cast<const char*>(&snap.n_heads), sizeof(snap.n_heads));
     out_.write(reinterpret_cast<const char*>(&snap.n_tokens), sizeof(snap.n_tokens));
     const int64_t ts = steady_to_ns(snap.timestamp);
     out_.write(reinterpret_cast<const char*>(&ts), sizeof(ts));
@@ -172,7 +172,13 @@ bool Replayer::load() {
         } else if (static_cast<RecordType>(type) == RecordType::Attention) {
             AttentionSnapshot snap;
             in.read(reinterpret_cast<char*>(&snap.layer), sizeof(snap.layer));
-            in.read(reinterpret_cast<char*>(&snap.head), sizeof(snap.head));
+            if (version >= 2) {
+                in.read(reinterpret_cast<char*>(&snap.n_heads), sizeof(snap.n_heads));
+            } else {
+                int legacy_head = 0;
+                in.read(reinterpret_cast<char*>(&legacy_head), sizeof(legacy_head));
+                snap.n_heads = std::max(1, legacy_head + 1);
+            }
             in.read(reinterpret_cast<char*>(&snap.n_tokens), sizeof(snap.n_tokens));
             int64_t ts = 0;
             in.read(reinterpret_cast<char*>(&ts), sizeof(ts));
@@ -182,6 +188,13 @@ bool Replayer::load() {
             snap.weights.resize(count);
             in.read(reinterpret_cast<char*>(snap.weights.data()),
                     static_cast<std::streamsize>(count * sizeof(float)));
+            if (version < 2 && snap.n_tokens > 0 && !snap.weights.empty()) {
+                snap.n_heads = static_cast<int>(snap.weights.size()) /
+                               (snap.n_tokens * snap.n_tokens);
+                if (snap.n_heads < 1) {
+                    snap.n_heads = 1;
+                }
+            }
             attentions_.push_back(std::move(snap));
         }
     }

@@ -233,7 +233,6 @@ bool Tracer::maybe_capture_attention(struct ggml_tensor* t, std::vector<uint8_t>
     }
 
     const int n_head = static_cast<int>(t->ne[2] > 0 ? t->ne[2] : 1);
-    const int head = std::clamp(config_.attention_head, 0, std::max(0, n_head - 1));
     const int n_tokens = static_cast<int>(t->ne[1]);
 
     const bool is_host = t->buffer ? ggml_backend_buffer_is_host(t->buffer) : true;
@@ -249,17 +248,21 @@ bool Tracer::maybe_capture_attention(struct ggml_tensor* t, std::vector<uint8_t>
 
     AttentionSnapshot snap;
     snap.layer = layer;
-    snap.head = head;
+    snap.n_heads = n_head;
     snap.n_tokens = n_tokens;
     snap.timestamp = std::chrono::steady_clock::now();
-    snap.weights.resize(static_cast<size_t>(n_tokens) * static_cast<size_t>(n_tokens), 0.f);
+    snap.weights.resize(static_cast<size_t>(n_head) * static_cast<size_t>(n_tokens) *
+                            static_cast<size_t>(n_tokens),
+                        0.f);
 
-    for (int row = 0; row < n_tokens; ++row) {
-        for (int col = 0; col < n_tokens; ++col) {
-            const size_t i = static_cast<size_t>(col * t->nb[0] + row * t->nb[1] +
-                                                 head * t->nb[2]);
-            snap.weights[static_cast<size_t>(row) * n_tokens + col] =
-                read_elem(data + i, t->type);
+    for (int h = 0; h < n_head; ++h) {
+        for (int row = 0; row < n_tokens; ++row) {
+            for (int col = 0; col < n_tokens; ++col) {
+                const size_t i = static_cast<size_t>(col * t->nb[0] + row * t->nb[1] +
+                                                     h * t->nb[2]);
+                snap.weights[static_cast<size_t>(h * n_tokens * n_tokens + row * n_tokens + col)] =
+                    read_elem(data + i, t->type);
+            }
         }
     }
 
